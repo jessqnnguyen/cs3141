@@ -6,26 +6,21 @@ import Physics
 -- Move a particle according to its velocity for the given number of (simulated) seconds.
 --
 moveParticle :: Float -> Particle -> Particle
-moveParticle delta_t (Particle m pos1@(x1, y1) (vx, vy))
-  = Particle m (x1 +  delta_rx, y1 + delta_ry) (vx, vy)
+moveParticle dt (Particle m pos1@(x1, y1) vel@(vx, vy))
+  = Particle m (x1 + delta_rx, y1 + delta_ry) vel
     where 
-       delta_rx = vx * delta_t
-       delta_ry = vy * delta_t
-     
-moveAllParticles :: Float -> [Particle] -> [Particle]
-moveAllParticles delta_t [] = []
-moveAllParticles delta_t [x] = [moveParticle delta_t x]
-moveAllParticles delta_t (x:xs) = moveParticle delta_t x : moveAllParticles delta_t xs
+       delta_rx = vx * dt
+       delta_ry = vy * dt
 
 -- Accelerate a particle in dependence on the gravitational force excerted by all other particles for
 -- the given number of (simulated) seconds.
 --
 accelerate :: Float -> [Particle] -> [Particle]
-accelerate delta_t [] = []
-accelerate delta_t (x:xs) = (Particle m2 pos2 v2) : accelerate delta_t xs
+accelerate dt [] = []
+accelerate dt [x] = [calculateVelocity dt x x]
+accelerate dt particles@(particle:otherParticles) = particle : accelerate dt otherParticles
   where 
-     Particle m1 pos1 v1 = x
-     Particle m2 pos2 v2 = calculateNewVelocityForAllParticles delta_t (Particle m1 pos1 v1) (x:xs)
+     particle = calculateNewVelocityForAllParticles dt particle particles
 
 -- Helper function for the accelerate function.
 -- This calculates the new velocity of a particle given:
@@ -33,12 +28,12 @@ accelerate delta_t (x:xs) = (Particle m2 pos2 v2) : accelerate delta_t xs
 -- two particles.
 -- This essentially calculates the new velocity of the first particle on the basis of the mass and position of the second particle.
 calculateVelocity :: Float -> Particle -> Particle -> Particle
-calculateVelocity delta_t (Particle m1 pos1 (vx, vy)) (Particle m2 pos2 v2) = Particle m1 pos1 (vx + delta_vx, vy + delta_vy)
+calculateVelocity dt particleOne@(Particle m pos (vx, vy)) particleTwo = newParticle
    where 
-     a = force (Particle m1 pos1 (vx, vy)) (Particle m2 pos2 v2)
-     (ax, ay) = a
-     delta_vx = ax * delta_t
-     delta_vy = ay * delta_t
+     (ax, ay) = force particleOne particleTwo
+     delta_vx = ax * dt
+     delta_vy = ay * dt
+     newParticle = Particle m pos (vx + delta_vx, vy + delta_vy)
 
 -- Helper function for the accelerate function.
 -- This calculates the new velocity for a particle given:
@@ -47,27 +42,22 @@ calculateVelocity delta_t (Particle m1 pos1 (vx, vy)) (Particle m2 pos2 v2) = Pa
 -- a list of particles
 -- This essentially computes the effect of all the other particles on given particle's velocity.     
 calculateNewVelocityForAllParticles :: Float -> Particle -> [Particle] -> Particle
-calculateNewVelocityForAllParticles delta_t (Particle m1 pos1 v1) [] = Particle m1 pos1 v1
-calculateNewVelocityForAllParticles delta_t (Particle m1 pos1 v1) [x] = calculateVelocity delta_t (Particle m1 pos1 v1) nextParticle 
-  where
-     (Particle m2 pos2 v2) = x
-     nextParticle = (Particle m2 pos2 v2)
-calculateNewVelocityForAllParticles delta_t (Particle m1 pos1 v1) (x:xs) = calculateNewVelocityForAllParticles delta_t (Particle m1 pos1 v1) xs
+calculateNewVelocityForAllParticles dt particle [] = particle
+calculateNewVelocityForAllParticles dt particle [x] = calculateVelocity dt particle x
+calculateNewVelocityForAllParticles dt particle (nextParticle:otherParticles) = calculateNewVelocityForAllParticles dt newParticle otherParticles
     where 
-        Particle m2 pos2 v2 = x
-        updateCurrParticle = calculateVelocity delta_t (Particle m1 pos1 v1) (Particle m2 pos2 v2)
-        Particle m1 pos1 v1 = updateCurrParticle 
+        newParticle = calculateVelocity dt particle nextParticle
 
---data World = World Float Float Float [Particle]
---           deriving (Show, Read)/
 -- Progressing the world state
 --
 advanceWorld :: unused -> Float -> World -> World
-advanceWorld _ delta_t (World s1 s2 s3 (x:xs)) = World s1 s2 s3 (y:ys)
+advanceWorld _ dt world@(World s1 s2 s3 []) = world
+advanceWorld _ dt world@(World s1 s2 s3 [x]) = world
+advanceWorld _ dt world@(World s1 s2 s3 (x:xs)) = newWorld
    where
-     scaledTime = s3 * delta_t 
-     (z:zs) = accelerate scaledTime (x:xs)
-     (y:ys) = moveAllParticles scaledTime (z:zs)
+     scaledTime = s3 * dt
+     (y:ys)     = map (moveParticle scaledTime) (accelerate scaledTime (x:xs))
+     newWorld   = World s1 s2 s3 (y:ys)
 
 
 
